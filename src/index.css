@@ -263,10 +263,19 @@ body {
 .branded-link {
   font-size: 0.75rem;
   font-weight: 700;
-  color: var(--text-secondary);
-  opacity: 0.6;
+  color: var(--text-secondary); /* Restored theme-aware color */
+  opacity: 0.8;
   letter-spacing: 0.05em;
-  margin-bottom: 1rem;
+  margin-top: 0.25rem; /* Tighter alignment */
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.url-icon {
+  margin-top: -1px;
 }
 
 .download-btn {

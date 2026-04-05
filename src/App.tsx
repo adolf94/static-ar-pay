@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download } from 'lucide-react';
+import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { providers, GENERIC_BANK_LOGO } from './config';
 import ThemeToggle from './components/ThemeToggle';
@@ -125,7 +125,10 @@ const App: React.FC = () => {
             <p className="account-number">{currentProvider.account}</p>
           </motion.div>
 
-          <div className="branded-link">pay.adolfrey.com</div>
+          <div className="branded-link">
+            <Globe size={12} className="url-icon" />
+            <span>pay.adolfrey.com</span>
+          </div>
           
           {/* Branded Icon Row for the Downloaded Image */}
           <div className="export-footer-icons">
