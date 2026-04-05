@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe } from 'lucide-react';
+import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe, X } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { providers, GENERIC_BANK_LOGO } from './config';
 import ThemeToggle from './components/ThemeToggle';
@@ -20,6 +20,8 @@ const App: React.FC = () => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const [selectedId, setSelectedId] = useState(providers[0].id);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const currentProvider = providers.find(p => p.id === selectedId) || providers[0];
   const [logoUrl, setLogoUrl] = useState<string>(currentProvider.logo || GENERIC_BANK_LOGO);
@@ -48,13 +50,18 @@ const App: React.FC = () => {
       
       const dataUrl = await toPng(cardRef.current, {
         cacheBust: true,
-        pixelRatio: 4, 
+        pixelRatio: 3, // Optimized for mobile memory
         backgroundColor: theme === 'dark' ? '#050505' : '#fdfdfd',
       });
 
       // Instantly restore clean UI
       cardRef.current.classList.remove('is-exporting');
 
+      // 1. Show preview for long-press support (Crucial for Messenger/In-app)
+      setPreviewUrl(dataUrl);
+      setIsPreviewOpen(true);
+
+      // 2. Attempt direct download (Backup for Chrome/Desktop)
       const link = document.createElement('a');
       link.download = `${currentProvider.app}_QR_Transfer.png`;
       link.href = dataUrl;
@@ -182,6 +189,38 @@ const App: React.FC = () => {
           <span>Adolf Rey Along • 2026</span>
         </div>
       </div>
+
+      {/* Preview Overlay for Messenger Compatibility */}
+      <AnimatePresence>
+        {isPreviewOpen && previewUrl && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="preview-overlay"
+            onClick={() => setIsPreviewOpen(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="preview-content"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button className="close-preview" onClick={() => setIsPreviewOpen(false)}>
+                <X size={24} />
+              </button>
+              <div className="preview-card-wrapper">
+                <img src={previewUrl} alt="Transfer QR" className="preview-image" />
+              </div>
+              <div className="preview-instruction">
+                <Smartphone size={20} />
+                <span>Long-press image to save or share</span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
