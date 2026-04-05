@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe, X } from 'lucide-react';
+import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe, X, Share } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { providers, GENERIC_BANK_LOGO } from './config';
 import ThemeToggle from './components/ThemeToggle';
@@ -18,17 +18,33 @@ const IconMap: Record<string, React.ReactNode> = {
 
 const App: React.FC = () => {
   const cardRef = useRef<HTMLDivElement>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // 1. Detect System Preference as Initial Value
+  const getSystemTheme = () =>
+    window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+
+  const [theme, setTheme] = useState<'light' | 'dark'>(getSystemTheme());
   const [selectedId, setSelectedId] = useState(providers[0].id);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [activeBlob, setActiveBlob] = useState<Blob | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  // 2. Sync with DOM and listen for system changes
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+
+    // Auto-switch when system preference changes
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e: MediaQueryListEvent) => {
+      setTheme(e.matches ? 'dark' : 'light');
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [theme]);
 
   const currentProvider = providers.find(p => p.id === selectedId) || providers[0];
   const [logoUrl, setLogoUrl] = useState<string>(currentProvider.logo || GENERIC_BANK_LOGO);
-
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
 
   useEffect(() => {
     if (currentProvider.logo) {
@@ -45,30 +61,48 @@ const App: React.FC = () => {
     if (cardRef.current === null) return;
 
     try {
-      // Temporarily reveal icons for the high-res capture
       cardRef.current.classList.add('is-exporting');
-      
+
       const dataUrl = await toPng(cardRef.current, {
         cacheBust: true,
-        pixelRatio: 3, // Optimized for mobile memory
+        pixelRatio: 2.5, // Better stability for Messenger
         backgroundColor: theme === 'dark' ? '#050505' : '#fdfdfd',
       });
 
-      // Instantly restore clean UI
       cardRef.current.classList.remove('is-exporting');
 
-      // 1. Show preview for long-press support (Crucial for Messenger/In-app)
-      setPreviewUrl(dataUrl);
+      // Convert to Blob for memory safety
+      const blob = await (await fetch(dataUrl)).blob();
+      const blobUrl = URL.createObjectURL(blob);
+
+      setActiveBlob(blob);
+      setPreviewUrl(blobUrl);
       setIsPreviewOpen(true);
 
-      // 2. Attempt direct download (Backup for Chrome/Desktop)
+      // Attempt direct download (Backup for Desktop)
       const link = document.createElement('a');
       link.download = `${currentProvider.app}_QR_Transfer.png`;
-      link.href = dataUrl;
+      link.href = blobUrl;
       link.click();
     } catch (err) {
       cardRef.current?.classList.remove('is-exporting');
-      console.error('Failed to download QR card:', err);
+      console.error('Failed to generate image:', err);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!activeBlob) return;
+    try {
+      const file = new File([activeBlob], `${currentProvider.app}_QR.png`, { type: 'image/png' });
+      if (navigator.share && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Transfer QR—${currentProvider.app}`,
+          text: `Scan to transfer to ${currentProvider.name}`,
+        });
+      }
+    } catch (err) {
+      console.warn('Native share failed:', err);
     }
   };
 
@@ -136,7 +170,7 @@ const App: React.FC = () => {
             <Globe size={12} className="url-icon" />
             <span>pay.adolfrey.com</span>
           </div>
-          
+
           {/* Branded Icon Row for the Downloaded Image */}
           <div className="export-footer-icons">
             {providers.map(p => (
@@ -153,8 +187,9 @@ const App: React.FC = () => {
 
         <button className="download-btn" onClick={handleDownload} style={{ background: currentProvider.color }}>
           <Download size={18} />
-          <span>Save as image</span>
+          <span>Save as Image</span>
         </button>
+        <p className="screenshot-tip">Can't save? Take a screenshot!</p>
 
         <div className="tabs-container">
           {providers.map((p) => (
@@ -193,14 +228,14 @@ const App: React.FC = () => {
       {/* Preview Overlay for Messenger Compatibility */}
       <AnimatePresence>
         {isPreviewOpen && previewUrl && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="preview-overlay"
             onClick={() => setIsPreviewOpen(false)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
@@ -213,9 +248,17 @@ const App: React.FC = () => {
               <div className="preview-card-wrapper">
                 <img src={previewUrl} alt="Transfer QR" className="preview-image" />
               </div>
-              <div className="preview-instruction">
-                <Smartphone size={20} />
-                <span>Long-press image to save or share</span>
+
+              <div className="preview-actions">
+                <button className="share-action" onClick={handleShare}>
+                  <Share size={20} />
+                  <span>Share or Save QR</span>
+                </button>
+
+                <div className="preview-instruction">
+                  <Smartphone size={18} />
+                  <span>Long-press OR Screenshot to save</span>
+                </div>
               </div>
             </motion.div>
           </motion.div>
