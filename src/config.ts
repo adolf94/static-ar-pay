@@ -47,7 +47,7 @@ export const providers: Provider[] = [
     account: "09151792560",
     color: "#32D74B",
     gradient: "linear-gradient(135deg, #000000 0%, #1A1A1A 100%)",
-    logo: "/resources/paymaya.jpg",
+    logo: "/resources/paymaya.png",
     qrData: "00020101021127780012com.p2pqrpay0111PAPHPHM1XXX02089996440304126391517925600515+63-915-17925605204601653036085802PH5915Adolf Rey Along6010Pasig City63045B29",
   },
   {

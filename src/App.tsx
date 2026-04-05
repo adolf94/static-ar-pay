@@ -43,20 +43,24 @@ const App: React.FC = () => {
     if (cardRef.current === null) return;
 
     try {
+      // Temporarily reveal icons for the high-res capture
+      cardRef.current.classList.add('is-exporting');
+      
       const dataUrl = await toPng(cardRef.current, {
         cacheBust: true,
-        pixelRatio: 4, // Ultra high-quality for scanning
+        pixelRatio: 4, 
         backgroundColor: theme === 'dark' ? '#050505' : '#fdfdfd',
-        style: {
-          borderRadius: '0', // Ensure nice square/rect edges in export if preferred, or keep current
-        }
       });
 
+      // Instantly restore clean UI
+      cardRef.current.classList.remove('is-exporting');
+
       const link = document.createElement('a');
-      link.download = `${currentProvider.app}_QR_Pay.png`;
+      link.download = `${currentProvider.app}_QR_Transfer.png`;
       link.href = dataUrl;
       link.click();
     } catch (err) {
+      cardRef.current?.classList.remove('is-exporting');
       console.error('Failed to download QR card:', err);
     }
   };
@@ -111,7 +115,7 @@ const App: React.FC = () => {
             </AnimatePresence>
           </div>
 
-          <motion.div 
+          <motion.div
             key={currentProvider.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -122,11 +126,24 @@ const App: React.FC = () => {
           </motion.div>
 
           <div className="branded-link">pay.adolfrey.com</div>
+          
+          {/* Branded Icon Row for the Downloaded Image */}
+          <div className="export-footer-icons">
+            {providers.map(p => (
+              <div key={p.id} className="footer-icon-pill">
+                {p.logo ? (
+                  <img src={p.logo} alt="" className="footer-mini-icon" />
+                ) : (
+                  <Landmark size={10} color="white" />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         <button className="download-btn" onClick={handleDownload} style={{ background: currentProvider.color }}>
           <Download size={18} />
-          <span>Save Transfer QR</span>
+          <span>Save as image</span>
         </button>
 
         <div className="tabs-container">
@@ -136,9 +153,15 @@ const App: React.FC = () => {
               className={`tab-item ${selectedId === p.id ? 'active' : ''}`}
               onClick={() => setSelectedId(p.id)}
             >
-              <span style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-                {IconMap[p.id] || <CreditCard size={18} />}
-                <span>{p.app}</span>
+              <span className="tab-content">
+                <div className="tab-icon-wrapper">
+                  {p.logo ? (
+                    <img src={p.logo} alt={p.app} className="tab-brand-icon" onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  ) : (
+                    IconMap[p.id] || <CreditCard size={16} />
+                  )}
+                </div>
+                <span className="tab-app-name">{p.app}</span>
               </span>
               {selectedId === p.id && (
                 <motion.div
@@ -153,7 +176,7 @@ const App: React.FC = () => {
 
         <div className="footer-info">
           <ShieldCheck size={14} color={theme === 'light' ? '#15803d' : '#32d74b'} />
-          <span>Verified Transfer • Adolf Rey Along</span>
+          <span>Adolf Rey Along • 2026</span>
         </div>
       </div>
     </div>
