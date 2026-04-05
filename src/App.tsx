@@ -81,7 +81,7 @@ const App: React.FC = () => {
             >
               {currentProvider.app}
             </motion.h1>
-            <p className="subtitle">Instapay QR</p>
+            <p className="subtitle">Instapay Transfer QR</p>
           </div>
 
           <div className="qr-outer">
@@ -111,7 +111,7 @@ const App: React.FC = () => {
             </AnimatePresence>
           </div>
 
-          <motion.div
+          <motion.div 
             key={currentProvider.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -126,7 +126,7 @@ const App: React.FC = () => {
 
         <button className="download-btn" onClick={handleDownload} style={{ background: currentProvider.color }}>
           <Download size={18} />
-          <span>Save as Image</span>
+          <span>Save Transfer QR</span>
         </button>
 
         <div className="tabs-container">
@@ -153,7 +153,7 @@ const App: React.FC = () => {
 
         <div className="footer-info">
           <ShieldCheck size={14} color={theme === 'light' ? '#15803d' : '#32d74b'} />
-          <span>Adolf Rey Along • 2026</span>
+          <span>Verified Transfer • Adolf Rey Along</span>
         </div>
       </div>
     </div>
