@@ -3,7 +3,9 @@ import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe, X, Share } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { providers, GENERIC_BANK_LOGO } from './config';
+import { providers, GENERIC_BANK_LOGO, ACCOUNTS_DATA_URL } from './config';
+import type { Provider } from './config';
+import { verifyAccountToken } from './utils/jwt';
 import ThemeToggle from './components/ThemeToggle';
 import './index.css';
 
@@ -11,7 +13,7 @@ const IconMap: Record<string, React.ReactNode> = {
   BPI: <Landmark size={18} />,
   GCash: <Wallet size={18} />,
   GoTyme: <Smartphone size={18} />,
-  Paymaya: <Zap size={18} />,
+  Maya: <Zap size={18} />,
   Unionbank: <Landmark size={18} />,
   BDO: <Landmark size={18} />,
 };
@@ -28,6 +30,34 @@ const App: React.FC = () => {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [activeBlob, setActiveBlob] = useState<Blob | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [verifiedProvider, setVerifiedProvider] = useState<Provider | null>(null);
+  const [tokens, setTokens] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
+
+
+  // Fetch accounts data with remote-first & local fallback
+  useEffect(() => {
+    // We try to fetch the latest from Cloudflare proxy if deployed, 
+    // otherwise fallback to the local internal version
+    const fetchData = async () => {
+      try {
+        const response = await fetch(ACCOUNTS_DATA_URL);
+        if (!response.ok) throw new Error(`Fetch failed: ${response.status}`);
+        const data = await response.json();
+        setTokens(data);
+      } catch (err) {
+        console.warn("Remote fetch failed, falling back to local accounts.json:", err);
+        // Fallback to local internal file if remote fails (e.g. 403 or server error)
+        fetch("/accounts/accounts.json")
+          .then(res => res.json())
+          .then(data => setTokens(data))
+          .catch(fallbackErr => console.error("Final fallback load failed:", fallbackErr));
+      }
+    };
+
+    fetchData();
+  }, []);
+
 
   // 2. Sync with DOM and listen for system changes
   useEffect(() => {
@@ -55,7 +85,34 @@ const App: React.FC = () => {
     } else {
       setLogoUrl(GENERIC_BANK_LOGO);
     }
-  }, [currentProvider.id, theme]);
+
+    // Verify JWT if present in consolidated tokens
+    const token = tokens[currentProvider.id.toLowerCase()];
+    setError(null); // Clear previous errors
+    if (token) {
+      verifyAccountToken(token)
+        .then((payload) => {
+          // If valid, override with verified data
+          setVerifiedProvider({
+            ...currentProvider,
+            token,
+            name: payload.accountName || currentProvider.name,
+            account: payload.accountId || currentProvider.account,
+            qrData: payload.qrData || currentProvider.qrData,
+          });
+        })
+        .catch((err) => {
+          setError(err.message);
+          setVerifiedProvider(null);
+        });
+    } else {
+      setVerifiedProvider(null);
+    }
+  }, [currentProvider.id, theme, tokens]);
+
+
+
+  const displayProvider = verifiedProvider || currentProvider;
 
   const handleDownload = async () => {
     if (cardRef.current === null) return;
@@ -114,6 +171,17 @@ const App: React.FC = () => {
           <ThemeToggle theme={theme} setTheme={setTheme} />
         </div>
 
+        {error && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            className="error-alert"
+          >
+            <ShieldCheck size={18} />
+            <span>{error}</span>
+          </motion.div>
+        )}
+
 
         {/* Export Area: Compact & Branded */}
         <div ref={cardRef} className="export-area" style={{ padding: '1rem', width: '100%' }}>
@@ -132,38 +200,59 @@ const App: React.FC = () => {
           <div className="qr-outer">
             <div className="qr-glow" style={{ background: currentProvider.color }} />
             <AnimatePresence mode="wait">
-              <motion.div
-                key={currentProvider.id + theme}
-                initial={{ opacity: 0, scale: 0.9, rotate: -5 }}
-                animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                exit={{ opacity: 0, scale: 1.1, rotate: 5 }}
-                transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-              >
-                <QRCodeSVG
-                  value={currentProvider.qrData}
-                  size={180} /* Compact Size */
-                  level="H"
-                  includeMargin={false}
-                  fgColor="#000000"
-                  imageSettings={{
-                    src: logoUrl,
-                    height: 36,
-                    width: 36,
-                    excavate: true,
-                  }}
-                />
-              </motion.div>
+              {displayProvider.qrData ? (
+                <motion.div
+                  key={currentProvider.id + theme}
+                  initial={{ opacity: 0, scale: 0.9, rotate: -5 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  exit={{ opacity: 0, scale: 1.1, rotate: 5 }}
+                  transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <QRCodeSVG
+                    value={displayProvider.qrData}
+                    size={180} /* Compact Size */
+                    level="H"
+                    includeMargin={false}
+                    fgColor="#000000"
+                    imageSettings={{
+                      src: logoUrl,
+                      height: 36,
+                      width: 36,
+                      excavate: true,
+                    }}
+                  />
+                </motion.div>
+              ) : (
+                <div className="qr-placeholder">
+                  <span>Loading Secure Data...</span>
+                </div>
+              )}
             </AnimatePresence>
           </div>
 
           <motion.div
-            key={currentProvider.id}
+            key={displayProvider.id}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="account-info"
           >
-            <h2 className="account-name">{currentProvider.name}</h2>
-            <p className="account-number">{currentProvider.account}</p>
+            <div className="account-header">
+              <h2 className="account-name" style={error ? { color: '#ff453a' } : undefined}>
+                {error || displayProvider.name || 'Fetching Account...'}
+              </h2>
+
+              {verifiedProvider && (
+                <motion.div 
+                  initial={{ scale: 0 }} 
+                  animate={{ scale: 1 }} 
+                  className="verified-badge"
+                  title="Verified by auth.adolfrey.com"
+                >
+                  <ShieldCheck size={16} color="#32d74b" fill="rgba(50, 215, 75, 0.1)" />
+                </motion.div>
+              )}
+            </div>
+            <p className="account-number">{displayProvider.account || 'Decrypting...'}</p>
           </motion.div>
 
           <div className="branded-link">
