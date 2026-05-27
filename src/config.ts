@@ -11,7 +11,7 @@ export type Provider = {
   token?: string;
 };
 
-export const ACCOUNTS_DATA_URL = "https://drive.google.com/uc?export=download&id=1uhCqsxQS1LD0z-Df1aQyUSfIswhK78gT";
+export const ACCOUNTS_DATA_URL = "/accounts/accounts.json";
 
 export const providers: Provider[] = [
   {

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe, X, Share } from 'lucide-react';
+import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe, X, Share, Copy, Check } from 'lucide-react';
 import { toPng } from 'html-to-image';
 import { providers, GENERIC_BANK_LOGO, ACCOUNTS_DATA_URL } from './config';
 import type { Provider } from './config';
@@ -33,6 +33,23 @@ const App: React.FC = () => {
   const [verifiedProvider, setVerifiedProvider] = useState<Provider | null>(null);
   const [tokens, setTokens] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [copiedName, setCopiedName] = useState(false);
+  const [copiedAccount, setCopiedAccount] = useState(false);
+
+  const handleCopyName = () => {
+    if (!isAccountVerified || !displayProvider.name) return;
+    navigator.clipboard.writeText(displayProvider.name);
+    setCopiedName(true);
+    setTimeout(() => setCopiedName(false), 2000);
+  };
+
+  const handleCopyAccount = () => {
+    if (!isAccountVerified || !displayProvider.account) return;
+    navigator.clipboard.writeText(displayProvider.account);
+    setCopiedAccount(true);
+    setTimeout(() => setCopiedAccount(false), 2000);
+  };
 
 
   // Fetch accounts data with remote-first & local fallback
@@ -89,7 +106,9 @@ const App: React.FC = () => {
     // Verify JWT if present in consolidated tokens
     const token = tokens[currentProvider.id.toLowerCase()];
     setError(null); // Clear previous errors
+    
     if (token) {
+      setIsVerifying(true);
       verifyAccountToken(token)
         .then((payload) => {
           // If valid, override with verified data
@@ -104,14 +123,22 @@ const App: React.FC = () => {
         .catch((err) => {
           setError(err.message);
           setVerifiedProvider(null);
+        })
+        .finally(() => {
+          setIsVerifying(false);
         });
     } else {
       setVerifiedProvider(null);
+      // No token means it's unverified (unless it's during initial load)
+      if (Object.keys(tokens).length > 0) {
+        setIsVerifying(false);
+      }
     }
   }, [currentProvider.id, theme, tokens]);
 
 
 
+  const isAccountVerified = !!verifiedProvider;
   const displayProvider = verifiedProvider || currentProvider;
 
   const handleDownload = async () => {
@@ -200,7 +227,17 @@ const App: React.FC = () => {
           <div className="qr-outer">
             <div className="qr-glow" style={{ background: currentProvider.color }} />
             <AnimatePresence mode="wait">
-              {displayProvider.qrData ? (
+              {isVerifying ? (
+                <div className="qr-placeholder">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                  >
+                    <Smartphone size={32} opacity={0.5} />
+                  </motion.div>
+                  <span>Verifying...</span>
+                </div>
+              ) : isAccountVerified && displayProvider.qrData ? (
                 <motion.div
                   key={currentProvider.id + theme}
                   initial={{ opacity: 0, scale: 0.9, rotate: -5 }}
@@ -223,8 +260,9 @@ const App: React.FC = () => {
                   />
                 </motion.div>
               ) : (
-                <div className="qr-placeholder">
-                  <span>Loading Secure Data...</span>
+                <div className="qr-placeholder unverified">
+                  <ShieldCheck size={40} color="#ff453a" opacity={0.2} />
+                  <span>{error ? "Verification Failed" : "Unverified Account"}</span>
                 </div>
               )}
             </AnimatePresence>
@@ -236,23 +274,76 @@ const App: React.FC = () => {
             animate={{ opacity: 1, y: 0 }}
             className="account-info"
           >
-            <div className="account-header">
-              <h2 className="account-name" style={error ? { color: '#ff453a' } : undefined}>
-                {error || displayProvider.name || 'Fetching Account...'}
-              </h2>
+            <div className="account-header-wrapper">
+              <div 
+                className={`account-header ${isAccountVerified ? 'copyable' : ''}`}
+                onClick={isAccountVerified ? handleCopyName : undefined}
+                title={isAccountVerified ? "Click to copy name" : undefined}
+              >
+                <h2 className="account-name" style={(!isAccountVerified && !isVerifying) ? { color: '#ff453a' } : undefined}>
+                  {!isAccountVerified && !isVerifying ? (error || 'Security Verification Required') : (displayProvider.name || 'Fetching Account...')}
+                </h2>
 
-              {verifiedProvider && (
-                <motion.div 
-                  initial={{ scale: 0 }} 
-                  animate={{ scale: 1 }} 
-                  className="verified-badge"
-                  title="Verified by auth.adolfrey.com"
-                >
-                  <ShieldCheck size={16} color="#32d74b" fill="rgba(50, 215, 75, 0.1)" />
-                </motion.div>
-              )}
+                {isAccountVerified && (
+                  <motion.div 
+                    initial={{ scale: 0 }} 
+                    animate={{ scale: 1 }} 
+                    className="verified-badge"
+                    title="Verified by auth.adolfrey.com"
+                  >
+                    <ShieldCheck size={16} color="#32d74b" fill="rgba(50, 215, 75, 0.1)" />
+                  </motion.div>
+                )}
+
+                {isAccountVerified && (
+                  <span className="copy-icon-wrapper copy-btn">
+                    {copiedName ? <Check size={14} className="copy-success-icon" /> : <Copy size={14} className="copy-default-icon" />}
+                  </span>
+                )}
+              </div>
+              <AnimatePresence>
+                {copiedName && (
+                  <motion.span
+                    initial={{ opacity: 0, y: 5, scale: 0.8 }}
+                    animate={{ opacity: 1, y: -10, scale: 1 }}
+                    exit={{ opacity: 0, y: 5, scale: 0.8 }}
+                    className="copy-tooltip"
+                  >
+                    Copied Name!
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </div>
-            <p className="account-number">{displayProvider.account || 'Decrypting...'}</p>
+
+            <div className="account-number-wrapper">
+              <div
+                className={`account-number-container ${isAccountVerified ? 'copyable' : ''}`}
+                onClick={isAccountVerified ? handleCopyAccount : undefined}
+                title={isAccountVerified ? "Click to copy account number" : undefined}
+              >
+                <p className="account-number">
+                  {isAccountVerified ? displayProvider.account : (isVerifying ? 'Decrypting...' : 'Unauthorized Access')}
+                </p>
+
+                {isAccountVerified && (
+                  <span className="copy-icon-wrapper copy-btn">
+                    {copiedAccount ? <Check size={14} className="copy-success-icon" /> : <Copy size={14} className="copy-default-icon" />}
+                  </span>
+                )}
+              </div>
+              <AnimatePresence>
+                {copiedAccount && (
+                  <motion.span
+                    initial={{ opacity: 0, y: 5, scale: 0.8 }}
+                    animate={{ opacity: 1, y: -10, scale: 1 }}
+                    exit={{ opacity: 0, y: 5, scale: 0.8 }}
+                    className="copy-tooltip"
+                  >
+                    Copied Account!
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
           </motion.div>
 
           <div className="branded-link">
@@ -274,11 +365,18 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <button className="download-btn" onClick={handleDownload} style={{ background: currentProvider.color }}>
+        <button 
+          className="download-btn" 
+          onClick={handleDownload} 
+          style={{ background: currentProvider.color, opacity: isAccountVerified ? 1 : 0.5, cursor: isAccountVerified ? 'pointer' : 'not-allowed' }}
+          disabled={!isAccountVerified}
+        >
           <Download size={18} />
-          <span>Save as Image</span>
+          <span>{isAccountVerified ? 'Save as Image' : 'Secure Data Locked'}</span>
         </button>
-        <p className="screenshot-tip">Can't save? Take a screenshot!</p>
+        <p className="screenshot-tip">
+          {isAccountVerified ? "Can't save? Take a screenshot!" : "Verification required to view payment details."}
+        </p>
 
         <div className="tabs-container">
           {providers.map((p) => (

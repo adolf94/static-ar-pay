@@ -295,11 +295,50 @@ body {
   transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.account-header-wrapper,
+.account-number-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.account-header-wrapper {
+  margin-bottom: 0.25rem;
+}
+
 .account-header {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
+}
+
+.account-number-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.account-header.copyable,
+.account-number-container.copyable {
+  cursor: pointer;
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.75rem;
+  background: transparent;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.account-header.copyable:hover,
+.account-number-container.copyable:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.account-header.copyable:active,
+.account-number-container.copyable:active {
+  transform: scale(0.97);
 }
 
 .verified-badge {
@@ -325,10 +364,54 @@ body {
 .account-number {
   font-size: 0.95rem;
   color: rgba(255, 255, 255, 0.9); /* Slightly soft white */
-  margin-top: 0.25rem;
-  margin-bottom: 0;
+  margin: 0;
   font-weight: 700;
   letter-spacing: 0.05em;
+}
+
+/* Copy Icon and Tooltip Styling */
+.copy-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.45;
+  transition: all 0.2s ease;
+  color: rgba(255, 255, 255, 0.8);
+  margin-left: 0.15rem;
+}
+
+.copyable:hover .copy-icon-wrapper {
+  opacity: 0.95;
+  transform: scale(1.08);
+}
+
+.copy-success-icon {
+  color: #30d158 !important; /* Premium system green */
+  filter: drop-shadow(0 0 4px rgba(48, 209, 88, 0.4));
+}
+
+.copy-tooltip {
+  position: absolute;
+  top: -2.5rem;
+  background: rgba(10, 10, 12, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #ffffff;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  pointer-events: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  z-index: 100;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Hide copy buttons when generating download/share image */
+.export-area.is-exporting .copy-btn {
+  display: none !important;
 }
 
 .branded-link {
