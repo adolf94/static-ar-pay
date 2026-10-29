@@ -1,12 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe, X, Share, Copy, Check } from 'lucide-react';
+import { Smartphone, ShieldCheck, CreditCard, Wallet, Landmark, Zap, Download, Globe, X, Share, Copy, Check, Plus } from 'lucide-react';
 import { toPng } from 'html-to-image';
-import { providers, GENERIC_BANK_LOGO, ACCOUNTS_DATA_URL } from './config';
+import { providers, GENERIC_BANK_LOGO, ACCOUNTS_DATA_URL, WALLET_IDS, LARGE_AMOUNT_BANK_ID } from './config';
 import type { Provider } from './config';
 import { verifyAccountToken } from './utils/jwt';
+import { embedAmount } from './utils/qrph';
 import ThemeToggle from './components/ThemeToggle';
+import AmountPrompt, { type AmountPromptMode } from './components/AmountPrompt';
 import './index.css';
 
 const IconMap: Record<string, React.ReactNode> = {
@@ -18,6 +20,63 @@ const IconMap: Record<string, React.ReactNode> = {
   BDO: <Landmark size={18} />,
 };
 
+// Remembers the visitor's last-used bank on this device.
+const SELECTED_BANK_KEY = 'ar-pay:selected-bank';
+
+// Per-bank deep links: pay.adolfrey.com/#bpi, /#gcash, /#bdo, ...
+// Matching is case-insensitive; aliases cover legacy names.
+const BANK_ALIASES: Record<string, string> = {
+  paymaya: 'Maya', // config.js historically used "Paymaya"
+};
+
+/** Sharper deep links: #bpi and #gcash?amt=500 (tag 54 in refactored TLV form). */
+const parseHash = (hash: string): { id: string | null; amount: number | null } => {
+  const raw = hash.trim().replace(/^#/, '').trim();
+  if (!raw) return { id: null, amount: null };
+  const [slug, query = ''] = raw.split('?');
+  const lower = slug.trim().toLowerCase();
+  const id = BANK_ALIASES[lower] ?? providers.find((p) => p.id.toLowerCase() === lower)?.id ?? null;
+  let amount: number | null = null;
+  if (id && query) {
+    for (const pair of query.split('&')) {
+      const [key, value = ''] = pair.split('=');
+      if (key === 'amt') {
+        const n = Number(value);
+        amount = Number.isFinite(n) && n >= 1 ? n : null;
+      }
+    }
+    // Wallet deep links follow the small-amount rule — >₱1,000 belongs
+    // in bank territory, so the amount is simply ignored there.
+    if (amount != null && WALLET_IDS.includes(id) && amount > 1000) amount = null;
+  }
+  return { id, amount };
+};
+
+const getInitialSelectedId = (): string | null => {
+  // Deep link wins. Then the last-opened bank — but wallets (GCash,
+  // Maya) are never auto-reopened: they're only for small amounts,
+  // so a fresh open goes back to the selector instead. First-timers
+  // (nothing remembered) also get the selector.
+  const fromLink = parseHash(window.location.hash).id;
+  if (fromLink) return fromLink;
+
+  try {
+    const saved = window.localStorage.getItem(SELECTED_BANK_KEY);
+    if (saved && providers.some((p) => p.id === saved) && !WALLET_IDS.includes(saved)) {
+      return saved;
+    }
+  } catch {
+    // Storage unavailable (e.g. private browsing) — fall through
+  }
+  return null;
+};
+
+const getInitialHashAmount = (): number | null => {
+  // Deep links can carry an amount (#gcash?amt=500 or #bpi?amt=1500)
+  const { id, amount } = parseHash(window.location.hash);
+  return id ? amount : null;
+};
+
 const App: React.FC = () => {
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -26,7 +85,8 @@ const App: React.FC = () => {
     window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 
   const [theme, setTheme] = useState<'light' | 'dark'>(getSystemTheme());
-  const [selectedId, setSelectedId] = useState(providers[0].id);
+  // Null = first time (or last-used was a wallet) → bank selector
+  const [selectedId, setSelectedId] = useState<string | null>(getInitialSelectedId);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [activeBlob, setActiveBlob] = useState<Blob | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -36,6 +96,13 @@ const App: React.FC = () => {
   const [isVerifying, setIsVerifying] = useState(false);
   const [copiedName, setCopiedName] = useState(false);
   const [copiedAccount, setCopiedAccount] = useState(false);
+  // Amount modal (wallet-tile flow and the "Add amount" edit flow)
+  const [amountPromptOpen, setAmountPromptOpen] = useState(false);
+  const [promptMode, setPromptMode] = useState<AmountPromptMode>('wallet');
+  const [pendingWalletId, setPendingWalletId] = useState<string | null>(null);
+  // Exact amount embedded in the displayed QR (QRPh tag 54);
+  // deep links initialize it too (#gcash?amt=500)
+  const [embeddedAmount, setEmbeddedAmount] = useState<number | null>(getInitialHashAmount);
 
   const handleCopyName = () => {
     if (!isAccountVerified || !displayProvider.name) return;
@@ -49,6 +116,65 @@ const App: React.FC = () => {
     navigator.clipboard.writeText(displayProvider.account);
     setCopiedAccount(true);
     setTimeout(() => setCopiedAccount(false), 2000);
+  };
+
+  const handleSelectBank = useCallback((id: string, rememberAs?: string) => {
+    setSelectedId(id);
+    // Banks keep no embedded amount when switching away
+    if (!WALLET_IDS.includes(id)) setEmbeddedAmount(null);
+    // Remember the visitor's last-used bank for their next visit.
+    // `rememberAs` lets a redirect be remembered as the bank the
+    // visitor actually tapped (see the >₱1,000 wallet redirect).
+    try {
+      window.localStorage.setItem(SELECTED_BANK_KEY, rememberAs ?? id);
+    } catch {
+      // Ignore — selection just won't persist
+    }
+    // Mirror the selection into the URL hash so the current view is a
+    // shareable deep link (pay.adolfrey.com/#bpi). replaceState adds no
+    // history entry and does not fire 'hashchange'.
+    window.history.replaceState(null, '', `#${id.toLowerCase()}`);
+  }, []);
+
+  // ── Amount-based routing ─────────────────────────────────────────
+  // Wallets are for small amounts only (wallet funds can't be moved
+  // to a bank for free): tapping GCash/Maya asks about the amount —
+  // ₱1,000 or less → that wallet's QR, more → BPI bank transfer.
+  const handleWalletTileTap = (walletId: string) => {
+    setPendingWalletId(walletId);
+    setAmountPromptOpen(true);
+  };
+
+  // Submit from the amount modal — the wallet-tile flow navigates to
+  // the tapped wallet; the edit flow embeds the amount in place.
+  // The amount is also mirrored into the URL hash (shareable).
+  const handleSubmitAmount = (amount: number) => {
+    setAmountPromptOpen(false);
+    setEmbeddedAmount(amount);
+    if (promptMode === 'wallet' && pendingWalletId) handleSelectBank(pendingWalletId);
+    setPendingWalletId(null);
+    const idForUrl = promptMode === 'wallet' ? pendingWalletId : selectedId;
+    if (idForUrl) {
+      window.history.replaceState(null, '', `#${idForUrl.toLowerCase()}?amt=${amount}`);
+    }
+  };
+
+  // "Add amount" affordance / amount badge — embeds an amount on the
+  // QR that's currently on screen (works for wallets and banks).
+  const handleEditAmount = () => {
+    setPendingWalletId(null);
+    setPromptMode('edit');
+    setAmountPromptOpen(true);
+  };
+
+  const handleAmountLarge = () => {
+    setAmountPromptOpen(false);
+    // Show BPI for this transfer, but remember the wallet that was
+    // actually tapped — the next open still follows the wallet rule
+    // (first-time selector flow) instead of reopening on BPI.
+    setEmbeddedAmount(null);
+    handleSelectBank(LARGE_AMOUNT_BANK_ID, pendingWalletId ?? undefined);
+    setPendingWalletId(null);
   };
 
 
@@ -90,10 +216,27 @@ const App: React.FC = () => {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, [theme]);
 
-  const currentProvider = providers.find(p => p.id === selectedId) || providers[0];
-  const [logoUrl, setLogoUrl] = useState<string>(currentProvider.logo || GENERIC_BANK_LOGO);
+  // 3. Follow the URL hash while the app is open (e.g. a shared
+  // pay.adolfrey.com/#bpi?amt=1500 link pasted into the address bar)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const { id, amount } = parseHash(window.location.hash);
+      if (id) handleSelectBank(id);
+      setEmbeddedAmount(amount);
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [handleSelectBank]);
+
+  const currentProvider = selectedId ? providers.find((p) => p.id === selectedId) : undefined;
+  const [logoUrl, setLogoUrl] = useState<string>(currentProvider?.logo || GENERIC_BANK_LOGO);
 
   useEffect(() => {
+    // No bank selected (chooser view) — nothing to verify yet.
+    // selectedId can only be null on first load, when every state
+    // managed below is still at its initial value, so no reset needed.
+    if (!currentProvider) return;
+
     if (currentProvider.logo) {
       const img = new Image();
       img.src = currentProvider.logo;
@@ -134,15 +277,12 @@ const App: React.FC = () => {
         setIsVerifying(false);
       }
     }
-  }, [currentProvider.id, theme, tokens]);
+  }, [currentProvider?.id, theme, tokens]);
 
 
-
-  const isAccountVerified = !!verifiedProvider;
-  const displayProvider = verifiedProvider || currentProvider;
 
   const handleDownload = async () => {
-    if (cardRef.current === null) return;
+    if (!currentProvider || cardRef.current === null) return;
 
     try {
       cardRef.current.classList.add('is-exporting');
@@ -175,7 +315,7 @@ const App: React.FC = () => {
   };
 
   const handleShare = async () => {
-    if (!activeBlob) return;
+    if (!activeBlob || !currentProvider) return;
     try {
       const file = new File([activeBlob], `${currentProvider.app}_QR.png`, { type: 'image/png' });
       if (navigator.share && navigator.canShare({ files: [file] })) {
@@ -189,6 +329,101 @@ const App: React.FC = () => {
       console.warn('Native share failed:', err);
     }
   };
+
+  // ── Neutral chooser (first visit / no saved choice) ──────────────────
+  // No bank is preselected: every provider is an equally weighted card,
+  // so payers pick the app they actually bank with instead of
+  // defaulting to whatever QR happens to be shown first.
+  if (!currentProvider) {
+    return (
+      <div className="app-container">
+        <div className="bg-glow" />
+        <div className="glass-card">
+          <div className="theme-toggle-wrapper">
+            <ThemeToggle theme={theme} setTheme={setTheme} />
+          </div>
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="error-alert"
+            >
+              <ShieldCheck size={18} />
+              <span>{error}</span>
+            </motion.div>
+          )}
+
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+            className="chooser-view"
+          >
+            <div className="header">
+              <h1 className="title">How would you like to pay?</h1>
+              <p className="subtitle">Choose your bank or e-wallet</p>
+            </div>
+
+            {/* Banks open directly; wallets ask about the amount first */}
+            <div className="chooser-grid">
+              {providers.map((p) => (
+                <button
+                  key={p.id}
+                  className="bank-card"
+                  onClick={() =>
+                    WALLET_IDS.includes(p.id) ? handleWalletTileTap(p.id) : handleSelectBank(p.id)
+                  }
+                  style={{ '--card-brand': p.color } as React.CSSProperties}
+                >
+                  <span className="bank-card-logo">
+                    {p.logo ? (
+                      <img
+                        src={p.logo}
+                        alt={p.app}
+                        className="tab-brand-icon"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                    ) : (
+                      IconMap[p.id] || <CreditCard size={20} />
+                    )}
+                  </span>
+                  <span className="bank-card-name">{p.app}</span>
+                </button>
+              ))}
+            </div>
+
+            <p className="chooser-hint">Wallets (GCash, Maya) are for amounts of ₱1,000 or less.</p>
+          </motion.div>
+
+          <div className="footer-info">
+            <ShieldCheck size={14} color={theme === 'light' ? '#15803d' : '#32d74b'} />
+            <span>Adolf Rey Along • 2026</span>
+          </div>
+        </div>
+
+        {/* Amount modal — wallet check from the selector, "Add amount"
+            edit flow from the QR view */}
+        <AmountPrompt
+          open={amountPromptOpen}
+          mode={promptMode}
+          walletName={pendingWalletId ? providers.find((p) => p.id === pendingWalletId)?.app : undefined}
+          maxAmount={1000}
+          onSubmit={handleSubmitAmount}
+          onLarge={handleAmountLarge}
+          onDismiss={() => setAmountPromptOpen(false)}
+        />
+      </div>
+    );
+  }
+
+  const isAccountVerified = !!verifiedProvider;
+  const displayProvider = verifiedProvider || currentProvider;
+  // Any QR can carry an embedded amount (QRPh tag 54 + fresh CRC)
+  const qrValue =
+    displayProvider.qrData && embeddedAmount != null
+      ? embedAmount(displayProvider.qrData, embeddedAmount)
+      : displayProvider.qrData;
 
   return (
     <div className="app-container" style={{ '--brand-color': currentProvider.color } as any}>
@@ -237,7 +472,7 @@ const App: React.FC = () => {
                   </motion.div>
                   <span>Verifying...</span>
                 </div>
-              ) : isAccountVerified && displayProvider.qrData ? (
+              ) : isAccountVerified && qrValue ? (
                 <motion.div
                   key={currentProvider.id + theme}
                   initial={{ opacity: 0, scale: 0.9, rotate: -5 }}
@@ -246,7 +481,7 @@ const App: React.FC = () => {
                   transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                 >
                   <QRCodeSVG
-                    value={displayProvider.qrData}
+                    value={qrValue}
                     size={180} /* Compact Size */
                     level="H"
                     includeMargin={false}
@@ -267,6 +502,17 @@ const App: React.FC = () => {
               )}
             </AnimatePresence>
           </div>
+
+          {/* Embedded amount — content, so it stays in exports; tap to change */}
+          {embeddedAmount != null && (
+            <p
+              className="qr-amount-badge"
+              onClick={handleEditAmount}
+              title="Tap to change the amount"
+            >
+              Amount: ₱{embeddedAmount.toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+            </p>
+          )}
 
           <motion.div
             key={displayProvider.id}
@@ -378,12 +624,27 @@ const App: React.FC = () => {
           {isAccountVerified ? "Can't save? Take a screenshot!" : "Verification required to view payment details."}
         </p>
 
+        {/* "Add amount" — small affordance near the bottom of the card.
+            UI only, so it lives outside the export area and never shows
+            in saves; the amount badge under the QR stays in exports. */}
+        {embeddedAmount == null && (
+          <button className="add-amount-hint" onClick={handleEditAmount}>
+            <Plus size={13} />
+            <span>Add amount</span>
+          </button>
+        )}
+
+        {/* Bank switcher — the 2-row tile panel. Banks switch directly;
+            wallet tiles tap through the amount check. Pure UI, so it
+            lives outside the export area and never shows in saves. */}
         <div className="tabs-container">
           {providers.map((p) => (
             <button
               key={p.id}
               className={`tab-item ${selectedId === p.id ? 'active' : ''}`}
-              onClick={() => setSelectedId(p.id)}
+              onClick={() =>
+                WALLET_IDS.includes(p.id) ? handleWalletTileTap(p.id) : handleSelectBank(p.id)
+              }
             >
               <span className="tab-content">
                 <div className="tab-icon-wrapper">
@@ -451,6 +712,23 @@ const App: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Amount modal — wallet check and "Add amount" edit flow */}
+      <AmountPrompt
+        open={amountPromptOpen}
+        mode={promptMode}
+        walletName={
+          promptMode === 'edit'
+            ? currentProvider.app
+            : pendingWalletId
+              ? providers.find((p) => p.id === pendingWalletId)?.app
+              : undefined
+        }
+        maxAmount={promptMode === 'edit' && !WALLET_IDS.includes(currentProvider.id) ? 50000 : 1000}
+        onSubmit={handleSubmitAmount}
+        onLarge={handleAmountLarge}
+        onDismiss={() => setAmountPromptOpen(false)}
+      />
     </div>
   );
 };

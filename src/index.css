@@ -455,6 +455,7 @@ body {
   transform: scale(0.97);
 }
 
+/* ── Bottom bank switcher panel (2 rows of tiles) ───────────────── */
 .tabs-container {
   width: 100%;
   padding: 6px;
@@ -472,7 +473,7 @@ body {
   flex: 1;
   min-width: calc(33.33% - 0.4rem);
   position: relative;
-  padding: 0.65rem 0.25rem; /* Tighter padding for vertical stack */
+  padding: 0.65rem 0.25rem;
   border-radius: 1.25rem;
   border: none;
   background: transparent;
@@ -493,8 +494,8 @@ body {
 }
 
 .tab-icon-wrapper {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -659,6 +660,324 @@ body {
   background: rgba(255, 255, 255, 0.1);
   padding: 0.5rem 1rem;
   border-radius: 100px;
+}
+
+/* ── Neutral Bank Chooser (no preselected provider) ─────────────── */
+.chooser-view {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 1rem;
+}
+
+/* ── Bank selector (first open, or after wallet use) ────────────── */
+.chooser-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.bank-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 1.35rem 0.5rem 1.15rem;
+  border-radius: 1.5rem;
+  border: 1px solid var(--tab-border);
+  background: var(--tab-bg);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.bank-card:hover {
+  border-color: var(--card-brand, var(--glass-border));
+  box-shadow: 0 12px 28px -16px var(--card-brand, rgba(0, 0, 0, 0.4));
+  transform: translateY(-2px);
+}
+
+.bank-card:active {
+  transform: scale(0.96);
+}
+
+.bank-card-logo {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg);
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  color: var(--text-secondary);
+}
+
+.bank-card-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.amount-option {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  width: 100%;
+  padding: 1rem 1.25rem;
+  border-radius: 1.5rem;
+  border: 1px solid var(--tab-border);
+  background: var(--tab-bg);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.amount-option:hover {
+  border-color: var(--glass-border);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px -16px rgba(0, 0, 0, 0.4);
+}
+
+.amount-option:active {
+  transform: scale(0.97);
+}
+
+.amount-option-icon {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--bg);
+  color: var(--text-secondary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.amount-option-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.amount-option-label {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.amount-option-hint {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* ── Amount confirmation (wallets are for small amounts) ────────── */
+.prompt-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 1.5rem;
+}
+
+.prompt-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(40px) saturate(200%);
+  -webkit-backdrop-filter: blur(40px) saturate(200%);
+  border: 1px solid var(--glass-border);
+  border-radius: 2rem;
+  box-shadow: var(--card-shadow);
+  width: 100%;
+  max-width: 360px;
+  padding: 2rem 1.75rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.prompt-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin: 0 0 0.4rem;
+}
+
+.prompt-subtitle {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0 0 1.75rem;
+  line-height: 1.5;
+}
+
+.prompt-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+/* ── Amount entry (wallet amount check, step 2) ─────────────────── */
+.amount-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  border-radius: 1.25rem;
+  border: 1px solid var(--glass-border);
+  background: var(--tab-bg);
+  margin-bottom: 0.75rem;
+}
+
+.amount-entry-currency {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: var(--text-secondary);
+}
+
+.amount-entry input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  text-align: center;
+  font-family: inherit;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.amount-entry input::-webkit-outer-spin-button,
+.amount-entry input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.amount-error {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ff453a;
+  margin: 0 0 0.75rem;
+}
+
+.prompt-btn-primary {
+  width: 100%;
+  padding: 0.95rem;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 1.25rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 8px 20px -8px #6366f1;
+  transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.prompt-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.prompt-btn-primary:active {
+  transform: scale(0.97);
+}
+
+.prompt-btn-ghost {
+  width: 100%;
+  padding: 0.85rem;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+  border-radius: 1.25rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.prompt-btn-ghost:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+/* Embedded amount badge under the wallet QR */
+.qr-amount-badge {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--tab-bg);
+  border: 1px solid var(--tab-border);
+  padding: 0.35rem 0.9rem;
+  border-radius: 100px;
+  margin: -1rem 0 1rem;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.qr-amount-badge:hover {
+  border-color: var(--glass-border);
+}
+
+/* "Add amount" affordance near the bottom of the card — UI only,
+   so it's hidden while exporting/downloading the QR */
+.add-amount-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--tab-bg);
+  border: 1px dashed var(--glass-border);
+  border-radius: 100px;
+  padding: 0.3rem 0.8rem;
+  cursor: pointer;
+  margin: -1.25rem 0 0.75rem;
+  font-family: inherit;
+  transition: all 0.25s ease;
+}
+
+.add-amount-hint:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+.export-area.is-exporting .add-amount-hint {
+  display: none !important;
+}
+
+.chooser-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  opacity: 0.65;
+  text-align: center;
+  font-weight: 500;
+  margin: 0 0 1.5rem;
+  max-width: 280px;
 }
 
 @keyframes float {
